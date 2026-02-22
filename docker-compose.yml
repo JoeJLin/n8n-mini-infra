@@ -1,0 +1,56 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n_local
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_HTTP_REQUEST_TIMEOUT=600000
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # 允许容器访问宿主机的 Python 和 Ollama
+    networks:
+      - postgres_network
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=trader_joe
+      - TZ=America/New_York # 统一时区，避免时间戳对比出错
+    ports:
+      - "5432:5432" # 暴露端口，方便你用 DBeaver/DataGrip 本地查看数据
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 映射初始化脚本：容器首次启动时会自动执行里面的 SQL
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - postgres_network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_gui
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "8080:80" # 浏览器访问地址: http://localhost:8080
+    networks:
+      - postgres_network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  postgres_network:
+    driver: bridge

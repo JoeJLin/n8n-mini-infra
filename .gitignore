@@ -1,0 +1,31 @@
+# --- 敏感配置文件 (必须排除) ---
+# 包含数据库密码、加密密钥、API Keys 等
+.env
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# --- n8n 数据目录 (必须排除) ---
+# 这些是 Docker 挂载的本地持久化数据，通常很大且包含敏感的 sqlite 数据库
+# 具体的文件夹名称取决于你 docker-compose.yml 里的 volumes 映射
+data/
+n8n_data/
+.n8n/
+database/
+nodes/
+backups/
+
+# --- 数据库特定数据 ---
+# 如果你使用 postgres 或 redis
+postgres_data/
+redis_data/
+
+# --- 系统文件 ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- 编辑器配置 ---
+.vscode/
+.idea/
