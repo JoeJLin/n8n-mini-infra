@@ -1,0 +1,206 @@
+{
+  "updatedAt": "2026-03-15T21:08:57.046Z",
+  "createdAt": "2026-03-14T04:19:58.973Z",
+  "id": "IobuRAaqZvH1DeeaWffRN",
+  "name": "polymarket",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://gamma-api.polymarket.com/events",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "active",
+              "value": "true"
+            },
+            {
+              "name": "closed",
+              "value": "false"
+            },
+            {
+              "name": "limit",
+              "value": "500"
+            },
+            {
+              "name": "order",
+              "value": "volume24hr"
+            },
+            {
+              "name": "ascending",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "feaafc0c-be6d-4b60-a974-03c2d4e14953",
+      "name": "Fetch Polymarket APIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1216,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let events = [];\nconst allItems = $input.all();\n\nif (allItems.length === 1 && Array.isArray(allItems[0].json)) {\n    events = allItems[0].json;\n} else if (allItems.length === 1 && allItems[0].json.data && Array.isArray(allItems[0].json.data)) {\n    events = allItems[0].json.data;\n} else {\n    events = allItems.map(item => item.json);\n}\n\n// 接收外部传参，如果没有就用默认值\nlet rawInput = \"stock, s&p, nasdaq, nvda, bitcoin, crypto, crude oil, gold， rate cut, inflation, cpi, fed, boj, ecb, war, tariff, china, stimulus, copper, natural gas, sliver\"; \nconst keywords = rawInput.toLowerCase().split(',').map(k => k.trim()).filter(k => k !== \"\");\n\nconst blackList = [\n    'knights', 'golden', 'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'league', \n    'world cup', 'olympic', 'match', 'esports', 'vs.', 'warriors', 'lakers'\n];\n\nlet filteredEvents = events.filter(e => {\n    if (!e.title) return false;\n    const lowerTitle = e.title.toLowerCase();\n    \n    // 💡 新增：把 Description 也转成小写拉进来检查\n    const lowerDesc = (e.description || \"\").toLowerCase();\n    \n    // 1. 黑名单大扫荡：不仅查标题，连描述里的蛛丝马迹也不放过！\n    if (blackList.some(badWord => lowerTitle.includes(badWord) || lowerDesc.includes(badWord))) {\n        return false; \n    }\n    \n    // 2. 通过了黑名单的，才去匹配我们的宏观关键词\n    return keywords.some(kw => lowerTitle.includes(kw));\n});\n\nfunction formatMoney(amount) {\n    let val = parseFloat(amount || 0);\n    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;\n    if (val >= 1000) return `$${(val / 1000).toFixed(0)}k`;\n    return `$${val.toFixed(0)}`;\n}\n\nlet finalTrending = [];\n\nfor (let e of filteredEvents) {\n    if (!e.markets || e.markets.length === 0) continue;\n    \n    let mainMarket = e.markets[0]; \n    let prices = mainMarket.outcomePrices;\n    \n    if (typeof prices === 'string') {\n        try { prices = JSON.parse(prices); } catch(err) { prices = []; }\n    }\n\n    if (!Array.isArray(prices) || prices.length < 2) continue;\n\n    let yPrice = parseFloat(prices[0]);\n    let nPrice = parseFloat(prices[1]);\n\n    if (yPrice >= 0.95 || yPrice <= 0.05) continue; \n\n    let yesOdds = (yPrice * 100).toFixed(1) + \"%\";\n    let noOdds = (nPrice * 100).toFixed(1) + \"%\";\n\n    let imageUrl = e.image || mainMarket.icon || \"https://polymarket.com/favicon.ico\";\n    let liqAmount = parseFloat(e.liquidity || mainMarket.liquidity || 0);\n    let formattedLiquidity = formatMoney(liqAmount);\n\n    // ✅ 新增：拼接 Polymarket 官方事件链接\n    let eventUrl = `https://polymarket.com/event/${e.slug}`;\n\n    finalTrending.push({\n        \"Event\": e.title,\n        \"Specific_Question\": mainMarket.question,\n        \"Volume\": formatMoney(e.volume) + \" Vol.\",\n        \"Liquidity\": formattedLiquidity + \" Liq.\",\n        \"Yes\": yesOdds,\n        \"No\": noOdds,\n        \"Event_URL\": eventUrl, // <-- 以后直接推送到 Discord 的链接\n        \"Image_URL\": imageUrl,  // <-- 以后用于 Discord 的缩略图\n        \"starte_date\": e.startDate,\n        \"end_date\": e.endDate\n    });\n    \n    if (finalTrending.length >= 10) break;\n}\n\nreturn [{ json: { polymarket_trending: finalTrending } }];"
+      },
+      "id": "2af7e2c4-37cc-4e9f-9406-9cc5c50ce216",
+      "name": "Extract Trending Stocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "5minmarkets-digests",
+        "fileName": "digests/polymarket_events/events.json",
+        "binaryData": false,
+        "fileContent": "={{ JSON.stringify($json) }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        656
+      ],
+      "id": "34bb62fb-aa42-45c4-9c78-ea3b20ee357f",
+      "name": "Upload a file",
+      "credentials": {
+        "aws": {
+          "id": "4hqdV9FlJIXB42Wy",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        992,
+        656
+      ],
+      "id": "9c97e7e6-5077-499b-ae74-0222f98e9450",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "connections": {
+    "Fetch Polymarket APIs": {
+      "main": [
+        [
+          {
+            "node": "Extract Trending Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Trending Stocks": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Polymarket APIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "e00d3a3d-9667-47d8-81c1-43b21c84ad19",
+  "activeVersionId": null,
+  "versionCounter": 4,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-14T04:19:58.974Z",
+      "createdAt": "2026-03-14T04:19:58.974Z",
+      "role": "workflow:owner",
+      "workflowId": "IobuRAaqZvH1DeeaWffRN",
+      "projectId": "f2FQ9BXCslPElISF",
+      "project": {
+        "updatedAt": "2026-01-16T20:28:19.610Z",
+        "createdAt": "2026-01-16T20:27:28.529Z",
+        "id": "f2FQ9BXCslPElISF",
+        "name": "Joe Lin <joelin2012@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-16T20:27:28.529Z",
+            "createdAt": "2026-01-16T20:27:28.529Z",
+            "userId": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+            "projectId": "f2FQ9BXCslPElISF",
+            "user": {
+              "updatedAt": "2026-03-15T04:00:10.000Z",
+              "createdAt": "2026-01-16T20:27:28.428Z",
+              "id": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+              "email": "joelin2012@hotmail.com",
+              "firstName": "Joe",
+              "lastName": "Lin",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-16T20:28:36.567Z",
+                "personalization_survey_n8n_version": "2.3.6",
+                "companyType": "personal",
+                "reportedSource": "youtube"
+              },
+              "settings": {
+                "userActivated": false,
+                "easyAIWorkflowOnboarded": true
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-03-15",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
