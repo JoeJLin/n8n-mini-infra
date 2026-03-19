@@ -1,0 +1,193 @@
+{
+  "updatedAt": "2026-03-19T19:58:02.754Z",
+  "createdAt": "2026-03-17T17:29:58.105Z",
+  "id": "rlncGE36DlQCgfh6Lclhk",
+  "name": "Fear and Greed Index",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "707bac47-2168-40cd-80a9-c37f4d9fa9f1",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. 拿到原始数据\nconst raw = $input.item.json.fear_and_greed; \n\n// 2. 清洗提取你需要的核心数据\nconst cleanData = {\n    date: new Date().toISOString().split('T')[0], // 今天的日期，例如 2026-03-19\n    current_score: Math.round(raw.score),         // 当前分数\n    current_rating: raw.rating,                   // 当前状态 (如 extreme fear)\n    last_close: Math.round(raw.previous_close),   // 昨日收盘\n    update_time: new Date().toISOString(),        // 精确更新时间\n    \n    // 🌟 新增的数据来源字段\n    source_name: \"CNN Fear & Greed Index\",\n    source_url: \"https://edition.cnn.com/markets/fear-and-greed\"\n};\n\n// 3. 把这个漂亮的 JSON 转换成字符串\nconst jsonString = JSON.stringify(cleanData, null, 2);\n\n// 4. 将其转换为 n8n 可以识别的“文件(Binary)”格式，准备传给 S3\nreturn {\n    json: cleanData, // 保留一份 JSON 方便你在 n8n 里查看\n    binary: {\n        data: {\n            data: Buffer.from(jsonString).toString('base64'), // 转成文件流\n            mimeType: 'application/json',\n            fileName: `fgi-${cleanData.date}.json` // 动态生成每天的文件名，如 fgi-2026-03-19.json\n        }\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "752e9d5d-569f-4e07-bcf7-7ec02705a093",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "=https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{{$today.toFormat('yyyy-MM-dd')}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Referer",
+              "value": "https://edition.cnn.com/"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d0d0e935-e5d0-400d-b35e-0daa5f5267d5",
+      "name": "CNN Fear and Greed Index"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "5minmarkets-digests",
+        "fileName": "=digests/fear_and_greed_index/{{ $binary.data.fileName }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "d5ddd54a-ee92-45c2-aa31-e6f3d56ea8f2",
+      "name": "Upload a file",
+      "credentials": {
+        "aws": {
+          "id": "4hqdV9FlJIXB42Wy",
+          "name": "AWS (IAM) account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "CNN Fear and Greed Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CNN Fear and Greed Index": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "f5dcba32-063d-4c46-a92a-423ccc0d547e",
+  "activeVersionId": null,
+  "versionCounter": 5,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-17T17:29:58.106Z",
+      "createdAt": "2026-03-17T17:29:58.106Z",
+      "role": "workflow:owner",
+      "workflowId": "rlncGE36DlQCgfh6Lclhk",
+      "projectId": "f2FQ9BXCslPElISF",
+      "project": {
+        "updatedAt": "2026-01-16T20:28:19.610Z",
+        "createdAt": "2026-01-16T20:27:28.529Z",
+        "id": "f2FQ9BXCslPElISF",
+        "name": "Joe Lin <joelin2012@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-16T20:27:28.529Z",
+            "createdAt": "2026-01-16T20:27:28.529Z",
+            "userId": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+            "projectId": "f2FQ9BXCslPElISF",
+            "user": {
+              "updatedAt": "2026-03-19T04:58:57.000Z",
+              "createdAt": "2026-01-16T20:27:28.428Z",
+              "id": "66ae0bfa-db06-48f7-832a-98ff261fdd7a",
+              "email": "joelin2012@hotmail.com",
+              "firstName": "Joe",
+              "lastName": "Lin",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-16T20:28:36.567Z",
+                "personalization_survey_n8n_version": "2.3.6",
+                "companyType": "personal",
+                "reportedSource": "youtube"
+              },
+              "settings": {
+                "userActivated": false,
+                "easyAIWorkflowOnboarded": true
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-03-19",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
